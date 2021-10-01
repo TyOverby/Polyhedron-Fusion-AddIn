@@ -1,5 +1,5 @@
 import adsk.core, adsk.fusion, adsk.cam, traceback
-import urllib
+import urllib.request
 
 # Global list to keep all event handlers in scope.
 handlers = []
@@ -236,9 +236,9 @@ def makePoly(link):
             content = urllib.request.urlopen(link)
             content = [line.decode().strip() for line in content]
             content = [line for line in content if line is not '']
-        except:
+        except Exception as inst:
             if ui:
-                ui.messageBox('Problem with connecting to web data')
+                ui.messageBox('Problem with connecting to web data' + inst)
             return
 
         # Decode data into lists for constants, vertices, and faces
@@ -292,6 +292,8 @@ def makePoly(link):
 
         # Get sketches and a base plane
         sketches = subComp1.sketches
+        constructionPlanes = subComp1.constructionPlanes
+        constructionPoints = subComp1.constructionPoints
         xyPlane = rootComp.xYConstructionPlane
 
         # 
@@ -300,11 +302,39 @@ def makePoly(link):
         patches = subComp1.features.patchFeatures
 
         # Loop through each face profile to be created from 'faces' list
+        face_idx = 1
         for face in faces:
+            face_idx += 1
+
             # Get new sketch ready to create a profile
+
+            all_points = []
+            all_points_str = []
+
             sketch = sketches.add(xyPlane)
+
+            sketchPoints = sketch.sketchPoints
+            positionTwo = adsk.core.Point3D.create(5.0, 0, 0)
+            sketchPointTwo = sketchPoints.add(positionTwo)
+            positionThree = adsk.core.Point3D.create(0, -5.0, 0)
+            sketchPointThree = sketchPoints.add(positionThree)
+
+            for i in range(len(face)):
+               point1 = vertices[int(face[i])]
+               point1 = [float(x) for x in point1]
+               all_points_str.append(str(point1[0]) + " " + str(point1[1]) + " " + str(point1[2]));
+               p = adsk.core.Point3D.create(point1[0], point1[1], point1[2])
+               p2= sketchPoints.add(p)
+               all_points.append(p2)
+
+            plane_input = constructionPlanes.createInput()
+            plane_input.setByThreePoints(all_points[0], all_points[1], all_points[2]);
+            #ui.messageBox(str(all_points_str))
+            plane = constructionPlanes.add(plane_input)
+
             lines = sketch.sketchCurves.sketchLines
             profiles_collection = adsk.core.ObjectCollection.create()
+
 
             # For each pair of verteces in the face, draw a line
             for i in range(len(face)):
@@ -312,8 +342,13 @@ def makePoly(link):
                 point2 = vertices[int(face[i-1])]
                 point1 = [float(x) for x in point1]  # TO DO: Check if float is needed
                 point2 = [float(x) for x in point2]
-                lines.addByTwoPoints(adsk.core.Point3D.create(point1[0], point1[1], point1[2]),
-                adsk.core.Point3D.create(point2[0], point2[1], point2[2]))
+                lines.addByTwoPoints(
+                    #sketch.modelToSketchSpace(
+                        (
+                            adsk.core.Point3D.create(point1[0], point1[1], point1[2])),
+                    #sketch.modelToSketchSpace(
+                        (
+                            adsk.core.Point3D.create(point2[0], point2[1], point2[2])))
 
             # Grab all profiles in the face for creating patch
             for profile in sketch.profiles:
@@ -326,6 +361,29 @@ def makePoly(link):
 
             # Add new patch to the surfaces collection
             surfaces.add(patch_feature.bodies[0])
+
+            # NEW START
+            #ui.messageBox(profiles_collection[0].plane);
+            #sketch.redefine(profiles_collection[0].plane);
+            textSketch = sketches.add(plane)
+            sketch_texts = textSketch.sketchTexts
+            #txt_pos = adsk.core.Point3D.create(0, 0, 0)
+
+               # pt_3d_1.x + partialU.x * self.axisDis,
+               #                                 pt_3d_1.y + partialU.y * self.axisDis,
+               #                                 pt_3d_1.z + partialU.z * self.axisDis  )
+
+            #txt_pos_in_sketch = sketch.modelToSketchSpace(adsk.core.Point3D.create(0, 0, 0))
+            #txt_pos_in_sketch = sketch.sketchToModelSpace(adsk.core.Point3D.create(0, 0, 0))
+            #txt_pos_in_sketch.y = txt_pos_in_sketch.y 
+            
+            sketch_text_input = sketch_texts.createInput(str(face_idx), 2, adsk.core.Point3D.create(0, 0, 0));
+            #sketch_text_input.setAsFitOnPath(path, False);
+            #parameters of this text
+
+            #sketch_text_input.fontName = self.fontName
+            this_letter_in_sketch = sketch_texts.add(sketch_text_input)
+            # NEW END
         
         # Boundary fill on all features to create solid
         bfill = subComp1.features.boundaryFillFeatures
